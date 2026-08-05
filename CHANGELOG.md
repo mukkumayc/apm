@@ -62,16 +62,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a new target cannot ship without a spec amendment. No normative
   statement count change. (#2503)
 
-### Fixed
-
-- `apm experimental enable <typo>` no longer routes a typo for a live flag
-  to graduated-flag guidance. `copilot-ap` scores above the fuzzy-match
-  cutoff against the graduated `copilot-cowork`, so it was answered with the
-  Cowork GA hint instead of `Did you mean: copilot-app?` -- pointing the
-  caller at an unrelated target. A graduated near-miss now only wins when it
-  matches more closely than the best live flag; an exact graduated name still
-  always wins. (#2503)
-
 ### Removed
 
 - **BREAKING:** `apm experimental enable copilot-cowork` (and `disable` /
@@ -116,6 +106,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in large repositories while preserving historical placement. It shares a
   source inventory across discovery and placement while preserving cleanup
   behavior, and preserves commas in character classes. (#2595)
+- `apm experimental enable <typo>` no longer routes a typo for a live flag
+  to graduated-flag guidance. `copilot-ap` scores above the fuzzy-match
+  cutoff against the graduated `copilot-cowork`, so it was answered with the
+  Cowork GA hint instead of `Did you mean: copilot-app?` -- pointing the
+  caller at an unrelated target. A graduated near-miss now only wins when it
+  matches more closely than the best live flag; an exact graduated name still
+  always wins. (#2503)
 - Hook commands such as `"${CLAUDE_PLUGIN_ROOT}"/hooks/probe.py` now rewrite to
   `"${CLAUDE_PLUGIN_ROOT}/hooks/probe.py"` and warn when a supported plugin-root
   placeholder remains unresolved instead of silently deploying a dead hook.
