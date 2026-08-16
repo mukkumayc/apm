@@ -187,16 +187,20 @@ def test_deps_update_target_help_uses_current_catalog():
 
 
 def test_compile_target_all_exclusion_lists_agent_skills_and_intellij():
-    """Regression for #2451: compile --target help must list agent-skills and intellij
-    as excluded from 'all', consistent with install --target help.
+    """Regression for #2451: compile --target help must list the catalog-driven
+    exclusion clause, including new explicit-only targets like copilot-cowork.
     """
+    from apm_cli.core.target_catalog import target_all_exclusion_help
+
     result = CliRunner().invoke(cli, ["compile", "--help"])
 
     assert result.exit_code == 0
     help_text = result.output
-    # Assert the full exclusion sentence (normalize whitespace from help-text wrapping)
-    normalized = " ".join(help_text.split())
-    assert "excludes agent-skills, antigravity, experimental targets, and intellij" in normalized
+    normalized = " ".join(help_text.split()).replace("copilot- cowork", "copilot-cowork")
+    expected_clause = target_all_exclusion_help()
+    assert expected_clause in normalized
+    assert "agent-skills" in normalized
+    assert "intellij" in normalized
 
 
 def test_mcp_install_help_lists_target_global_and_trust_transitive():
@@ -296,14 +300,18 @@ def test_compile_and_deps_exclusion_clause_matches_catalog():
 
     compile_result = CliRunner().invoke(cli, ["compile", "--help"])
     assert compile_result.exit_code == 0
-    compile_normalized = " ".join(compile_result.output.split())
+    compile_normalized = " ".join(compile_result.output.split()).replace(
+        "copilot- cowork", "copilot-cowork"
+    )
     assert expected_clause in compile_normalized, (
         f"compile --help exclusion clause mismatch; expected: {expected_clause!r}"
     )
 
     deps_result = CliRunner().invoke(cli, ["deps", "update", "--help"])
     assert deps_result.exit_code == 0
-    deps_normalized = " ".join(deps_result.output.split())
+    deps_normalized = " ".join(deps_result.output.split()).replace(
+        "copilot- cowork", "copilot-cowork"
+    )
     assert expected_clause in deps_normalized, (
         f"deps update --help exclusion clause mismatch; expected: {expected_clause!r}"
     )
