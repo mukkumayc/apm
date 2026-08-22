@@ -610,13 +610,21 @@ def _validate_and_add_packages_to_apm_yml(
         from ..utils.yaml_io import load_yaml_roundtrip
 
         data = load_yaml_roundtrip(apm_yml_path) or {}
+    except FileNotFoundError:
+        if dry_run:
+            data = {}
+        else:
+            (logger or InstallLogger()).error(f"Failed to read {APM_YML_FILENAME}")
+            sys.exit(1)
     except Exception as e:
         (logger or InstallLogger()).error(f"Failed to read {APM_YML_FILENAME}: {e}")
         sys.exit(1)
 
-    from ..install.registry_wiring import get_effective_default_registry
+    _default_registry_for_cli = None
+    if not dry_run:
+        from ..install.registry_wiring import get_effective_default_registry
 
-    _default_registry_for_cli = get_effective_default_registry(data)
+        _default_registry_for_cli = get_effective_default_registry(data)
 
     # Ensure dependencies structure exists
     dep_section = "devDependencies" if dev else "dependencies"
@@ -857,7 +865,7 @@ def _handle_mcp_install(  # noqa: PLR0913
 @click.option("--exclude", help="Exclude one runtime from the resolved MCP/LSP target set")
 @click.option(
     "--only",
-    type=click.Choice(["apm", "mcp"]),
+    type=click.Choice(["apm", "mcp", "lsp"]),
     help="Install only specific dependency type",
 )
 @click.option(
@@ -1104,7 +1112,7 @@ def _handle_mcp_install(  # noqa: PLR0913
     ),
 )
 @click.pass_context
-def install(  # noqa: C901, PLR0913
+def install(  # noqa: C901, PLR0913, PLR0915
     ctx,
     packages,
     runtime,
@@ -1393,17 +1401,24 @@ def install(  # noqa: C901, PLR0913
             protocol_pref = ProtocolPreference.SSH
         elif use_https:
             protocol_pref = ProtocolPreference.HTTPS
+        elif dry_run:
+            protocol_pref = ProtocolPreference.from_str(os.environ.get("APM_GIT_PROTOCOL"))
         else:
             # Precedence: APM_GIT_PROTOCOL env var > apm config ssh > git insteadOf
             from ..config import get_apm_protocol_pref as _get_apm_protocol_pref
 
             _pref_str = _get_apm_protocol_pref()
             protocol_pref = ProtocolPreference.from_str(_pref_str)
-        # CLI flag > env var (APM_ALLOW_PROTOCOL_FALLBACK) > apm config > default.
-        # get_apm_allow_protocol_fallback() already encodes env > config > False.
-        from ..config import get_apm_allow_protocol_fallback as _get_apm_apf
+        if dry_run:
+            allow_protocol_fallback = allow_protocol_fallback or os.environ.get(
+                "APM_ALLOW_PROTOCOL_FALLBACK", ""
+            ).lower() in {"1", "true", "yes"}
+        else:
+            # CLI flag > env var (APM_ALLOW_PROTOCOL_FALLBACK) > apm config > default.
+            # get_apm_allow_protocol_fallback() already encodes env > config > False.
+            from ..config import get_apm_allow_protocol_fallback as _get_apm_apf
 
-        allow_protocol_fallback = allow_protocol_fallback or _get_apm_apf()
+            allow_protocol_fallback = allow_protocol_fallback or _get_apm_apf()
 
         # Resolve scope
         from ..core.scope import (
@@ -1417,7 +1432,7 @@ def install(  # noqa: C901, PLR0913
 
         scope = InstallScope.USER if global_ else InstallScope.PROJECT
 
-        if scope is InstallScope.USER:
+        if scope is InstallScope.USER and not dry_run:
             ensure_user_dirs()
             logger.progress("Installing to user scope (~/.apm/)")
             _scope_warn = warn_unsupported_user_scope()
@@ -1452,7 +1467,7 @@ def install(  # noqa: C901, PLR0913
             logger=logger,
         )
 
-        if not apm_yml_exists and packages:
+        if not apm_yml_exists and packages and not dry_run:
             derived_project_name = (
                 Path.cwd().name if scope is InstallScope.PROJECT else Path.home().name
             )
@@ -1482,6 +1497,7 @@ def install(  # noqa: C901, PLR0913
             sys.exit(1)
 
         outcome = None
+        _validated_packages: tuple[str, ...] = ()
         if packages:
             _validated_packages, outcome = _validate_and_add_packages_to_apm_yml(
                 packages,
@@ -1713,7 +1729,17 @@ def _install_apm_packages(ctx, outcome):
 
     # Parse apm.yml to get both APM and MCP dependencies
     try:
-        apm_package = APMPackage.from_apm_yml(ctx.manifest_path)
+        if ctx.dry_run and not ctx.manifest_path.exists():
+            apm_package = APMPackage.from_mapping(
+                {
+                    "name": "dry-run",
+                    "version": "0.0.0",
+                    "dependencies": {},
+                },
+                package_path=ctx.manifest_path.parent,
+            )
+        else:
+            apm_package = APMPackage.from_apm_yml(ctx.manifest_path)
     except click.UsageError:
         raise
     except Exception as e:
@@ -1725,13 +1751,17 @@ def _install_apm_packages(ctx, outcome):
     prod_mcp_deps = apm_package.get_mcp_dependencies()
     dev_mcp_deps = apm_package.get_dev_mcp_dependencies()
     mcp_deps = apm_package.get_all_mcp_dependencies()
+    lsp_deps = apm_package.get_lsp_dependencies()
     if not isinstance(mcp_deps, builtins.list):
         logger.verbose_detail("MCP dependencies were not a list; defaulting to empty")
         mcp_deps = []
+    if not isinstance(lsp_deps, builtins.list):
+        logger.verbose_detail("LSP dependencies were not a list; defaulting to empty")
+        lsp_deps = []
 
     logger.verbose_detail(
         f"Parsed {APM_YML_FILENAME}: {len(apm_deps)} APM deps, "
-        f"{len(prod_mcp_deps)} MCP deps"
+        f"{len(prod_mcp_deps)} MCP deps, {len(lsp_deps)} LSP deps"
         + (f", {len(dev_apm_deps)} dev APM deps" if dev_apm_deps else "")
         + (f", {len(dev_mcp_deps)} dev MCP deps" if dev_mcp_deps else "")
     )
@@ -1754,8 +1784,9 @@ def _install_apm_packages(ctx, outcome):
         )
 
     # Determine what to install based on install mode
-    should_install_apm = ctx.install_mode != InstallMode.MCP
-    should_install_mcp = ctx.install_mode != InstallMode.APM
+    should_install_apm = ctx.install_mode in {InstallMode.ALL, InstallMode.APM}
+    should_install_mcp = ctx.install_mode in {InstallMode.ALL, InstallMode.MCP}
+    should_install_lsp = ctx.install_mode in {InstallMode.ALL, InstallMode.LSP}
 
     # Show what will be installed if dry run
     if ctx.dry_run:
@@ -1763,10 +1794,12 @@ def _install_apm_packages(ctx, outcome):
             apm_dependencies=apm_deps,
             dev_apm_dependencies=dev_apm_deps,
             mcp_dependencies=mcp_deps,
+            lsp_dependencies=lsp_deps,
             validated_additions=ctx.validated_additions,
             additions_are_dev=ctx.dev,
             should_install_apm=should_install_apm,
             should_install_mcp=should_install_mcp,
+            should_install_lsp=should_install_lsp,
             only_packages=ctx.only_packages,
         )
         _check_insecure_dependencies(
@@ -1788,7 +1821,11 @@ def _install_apm_packages(ctx, outcome):
         _dr_preflight(
             project_root=ctx.project_root,
             apm_deps=list(prospective_plan.all_apm_dependencies),
-            mcp_deps=mcp_deps if should_install_mcp else None,
+            mcp_deps=(
+                list(prospective_plan.mcp_dependencies)
+                if prospective_plan.should_install_mcp
+                else None
+            ),
             no_policy=ctx.no_policy,
             logger=logger,
             dry_run=True,
@@ -1805,7 +1842,7 @@ def _install_apm_packages(ctx, outcome):
         return (
             prospective_plan.apm_dependency_count,
             prospective_plan.mcp_dependency_count,
-            0,
+            prospective_plan.lsp_dependency_count,
             None,
         )
 

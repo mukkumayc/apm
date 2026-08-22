@@ -24,8 +24,10 @@ def render_and_exit(
     should_install_apm: bool | None = None,
     apm_deps: Sequence[Any] = (),
     mcp_deps: Sequence[Any] = (),
+    lsp_deps: Sequence[Any] = (),
     dev_apm_deps: Sequence[Any] = (),
     should_install_mcp: bool | None = None,
+    should_install_lsp: bool | None = None,
     update: bool,
     only_packages: Sequence[str] | None = None,
     apm_dir: Path,
@@ -40,8 +42,10 @@ def render_and_exit(
             apm_dependencies=tuple(apm_deps),
             dev_apm_dependencies=tuple(dev_apm_deps),
             mcp_dependencies=tuple(mcp_deps),
+            lsp_dependencies=tuple(lsp_deps),
             should_install_apm=bool(should_install_apm),
             should_install_mcp=bool(should_install_mcp),
+            should_install_lsp=bool(should_install_lsp),
             only_packages=tuple(only_packages) if only_packages is not None else None,
         )
 
@@ -50,9 +54,9 @@ def render_and_exit(
 
     logger.progress("Dry run mode - showing what would be installed:")
 
-    if plan.should_install_apm and plan.apm_dependencies:
+    if plan.should_install_apm and plan.all_apm_dependencies:
         logger.progress(f"APM dependencies ({plan.apm_dependency_count}):")
-        for dep in plan.apm_dependencies:
+        for dep in plan.all_apm_dependencies:
             action = "update" if update else "install"
             logger.progress(f"  - {dep.repo_url}#{dep.reference or 'main'} -> {action}")
 
@@ -61,8 +65,13 @@ def render_and_exit(
         for dep in plan.mcp_dependencies:
             logger.progress(f"  - {dep}")
 
-    if not plan.all_apm_dependencies and not plan.mcp_dependencies:
-        logger.progress("No dependencies found in apm.yml")
+    if plan.should_install_lsp and plan.lsp_dependencies:
+        logger.progress(f"LSP dependencies ({plan.lsp_dependency_count}):")
+        for dep in plan.lsp_dependencies:
+            logger.progress(f"  - {dep}")
+
+    if not plan.has_selected_dependencies:
+        logger.progress("No dependencies selected in apm.yml")
 
     # Orphan preview: lockfile + manifest difference -- no integration
     # required, accurate to compute.

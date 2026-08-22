@@ -80,9 +80,9 @@ def validate_mcp_conflicts(
             "MCP servers are project-scoped; --global is not supported for MCP entries"
         )
 
-    # E3: --only apm conflicts with --mcp.
-    if only == "apm":
-        raise click.UsageError("cannot use --only apm with --mcp")
+    # E3: only the MCP selector is compatible with an MCP entry.
+    if only not in (None, "mcp"):
+        raise click.UsageError(f"cannot use --only {only} with --mcp")
 
     # E4: transport selection flags do not apply.
     if any_transport_flag:

@@ -467,7 +467,7 @@ def test_agent_plugin_component_ir_mutations_are_killed(
         ),
         (
             "src/apm_cli/commands/install.py",
-            "            preflight_agent_plugin_dry_run(ctx, all_apm_deps)",
+            "            preflight_agent_plugin_dry_run(ctx, list(prospective_plan.all_apm_dependencies))",
             "            pass  # native dry-run preflight removed",
             "dry-run native preflight must run before rendering success",
         ),
@@ -941,9 +941,17 @@ def test_prospective_dry_run_plan_has_single_owner() -> None:
 
     assert owner.count("class ProspectiveInstallPlan:") == 1
     assert owner.count("def from_manifest_and_validated_additions(") == 1
+    assert "lsp_dependencies:" in owner
+    assert "should_install_lsp:" in owner
+    assert "lsp_dependency_count" in owner
     assert "ProspectiveInstallPlan.from_manifest_and_validated_additions(" in adapter
+    assert "lsp_dependencies=lsp_deps," in adapter
     assert "plan: ProspectiveInstallPlan" in renderer
     assert "DependencyReference.parse" not in renderer
+    assert "plan.lsp_dependencies" in renderer
+    assert "plan.lsp_dependency_count" in renderer
+    assert "if scope is InstallScope.USER and not dry_run:" in adapter
+    assert "if not apm_yml_exists and packages and not dry_run:" in adapter
     assert "Prospective dry-run install plan" in owner_table
     assert "Dry-run previews must use ProspectiveInstallPlan" in guard
 
@@ -970,6 +978,86 @@ def test_prospective_dry_run_plan_guard_rejects_renderer_reparsing(
     renderer_path = sandbox / "src/apm_cli/install/presentation/dry_run.py"
     renderer_path.write_text(
         renderer_path.read_text(encoding="utf-8") + "\nDependencyReference.parse('owner/repo')\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ("bash", "scripts/lint-architecture-boundaries.sh"),
+        cwd=sandbox,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert result.returncode == 1
+    assert "Dry-run previews must use ProspectiveInstallPlan" in result.stdout
+
+
+def test_prospective_dry_run_plan_guard_rejects_user_scope_bootstrap(
+    tmp_path: Path,
+) -> None:
+    """The boundary lint rejects user directory creation during dry runs."""
+    root = Path(__file__).parents[2]
+    sandbox = tmp_path / "repo"
+    shutil.copytree(
+        root,
+        sandbox,
+        ignore=shutil.ignore_patterns(
+            ".git",
+            ".venv",
+            ".pytest_cache",
+            "__pycache__",
+            "build",
+            "dist",
+            "node_modules",
+        ),
+    )
+    install_path = sandbox / "src/apm_cli/commands/install.py"
+    install_path.write_text(
+        install_path.read_text(encoding="utf-8").replace(
+            "if scope is InstallScope.USER and not dry_run:",
+            "if scope is InstallScope.USER:",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ("bash", "scripts/lint-architecture-boundaries.sh"),
+        cwd=sandbox,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert result.returncode == 1
+    assert "Dry-run previews must use ProspectiveInstallPlan" in result.stdout
+
+
+def test_prospective_dry_run_plan_guard_rejects_renderer_lsp_recomputation(
+    tmp_path: Path,
+) -> None:
+    """The boundary lint rejects renderer-side LSP dependency derivation."""
+    root = Path(__file__).parents[2]
+    sandbox = tmp_path / "repo"
+    shutil.copytree(
+        root,
+        sandbox,
+        ignore=shutil.ignore_patterns(
+            ".git",
+            ".venv",
+            ".pytest_cache",
+            "__pycache__",
+            "build",
+            "dist",
+            "node_modules",
+        ),
+    )
+    renderer_path = sandbox / "src/apm_cli/install/presentation/dry_run.py"
+    renderer_path.write_text(
+        renderer_path.read_text(encoding="utf-8") + "\napm_package.get_lsp_dependencies()\n",
         encoding="utf-8",
     )
 

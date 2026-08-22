@@ -20,8 +20,10 @@ def render_and_exit(**kwargs) -> None:
             apm_dependencies=tuple(kwargs.pop("apm_deps")),
             dev_apm_dependencies=tuple(kwargs.pop("dev_apm_deps")),
             mcp_dependencies=tuple(kwargs.pop("mcp_deps")),
+            lsp_dependencies=tuple(kwargs.pop("lsp_deps", ())),
             should_install_apm=kwargs.pop("should_install_apm"),
             should_install_mcp=kwargs.pop("should_install_mcp"),
+            should_install_lsp=kwargs.pop("should_install_lsp", False),
             only_packages=(
                 tuple(only_packages)
                 if (only_packages := kwargs.pop("only_packages", None)) is not None
@@ -70,13 +72,16 @@ class TestRenderApmDeps:
             apm_dependencies=(_make_apm_dep(),),
             dev_apm_dependencies=(),
             mcp_dependencies=(_make_mcp_dep(),),
+            lsp_dependencies=(_make_mcp_dep("pyright"),),
             should_install_apm=False,
             should_install_mcp=True,
+            should_install_lsp=False,
             only_packages=None,
         )
 
         assert plan.apm_dependency_count == 0
         assert plan.mcp_dependency_count == 1
+        assert plan.lsp_dependency_count == 0
 
     def test_apm_deps_install_action_shown(self, tmp_path: Path) -> None:
         """APM deps rendered with 'install' when update=False (lines 42-45)."""
@@ -140,6 +145,27 @@ class TestRenderApmDeps:
         all_calls = " ".join(str(c) for c in logger.progress.call_args_list)
         assert "main" in all_calls
 
+    def test_dev_apm_deps_are_rendered_with_the_selected_count(self, tmp_path: Path) -> None:
+        """Dev dependencies appear in the same selected APM preview as the count."""
+        logger = _make_logger()
+        dep = _make_apm_dep("owner/dev-repo")
+
+        with patch("apm_cli.deps.lockfile.LockFile.read", side_effect=Exception):
+            render_and_exit(
+                logger=logger,
+                should_install_apm=True,
+                apm_deps=[],
+                mcp_deps=[],
+                dev_apm_deps=[dep],
+                should_install_mcp=False,
+                update=False,
+                apm_dir=tmp_path,
+            )
+
+        all_calls = " ".join(str(c) for c in logger.progress.call_args_list)
+        assert "APM dependencies (1)" in all_calls
+        assert "owner/dev-repo" in all_calls
+
     def test_mcp_deps_rendered(self, tmp_path: Path) -> None:
         """MCP deps block is rendered when should_install_mcp=True and mcp_deps non-empty (lines 48-50)."""
         logger = _make_logger()
@@ -159,6 +185,29 @@ class TestRenderApmDeps:
 
         all_calls = " ".join(str(c) for c in logger.progress.call_args_list)
         assert "MCP dependencies" in all_calls
+
+    def test_lsp_deps_rendered(self, tmp_path: Path) -> None:
+        """LSP dependencies render only when LSP is selected."""
+        logger = _make_logger()
+        dep = _make_mcp_dep("pyright")
+
+        with patch("apm_cli.deps.lockfile.LockFile.read", side_effect=Exception):
+            render_and_exit(
+                logger=logger,
+                should_install_apm=False,
+                apm_deps=[],
+                mcp_deps=[],
+                lsp_deps=[dep],
+                dev_apm_deps=[],
+                should_install_mcp=False,
+                should_install_lsp=True,
+                update=False,
+                apm_dir=tmp_path,
+            )
+
+        all_calls = " ".join(str(c) for c in logger.progress.call_args_list)
+        assert "LSP dependencies (1)" in all_calls
+        assert "pyright" in all_calls
 
     def test_no_deps_shows_empty_message(self, tmp_path: Path) -> None:
         """When all dep lists are empty the 'No dependencies found' message is shown (line 53)."""

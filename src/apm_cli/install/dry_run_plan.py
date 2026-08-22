@@ -16,8 +16,10 @@ class ProspectiveInstallPlan:
     apm_dependencies: tuple[DependencyReference, ...]
     dev_apm_dependencies: tuple[DependencyReference, ...]
     mcp_dependencies: tuple[Any, ...]
+    lsp_dependencies: tuple[Any, ...]
     should_install_apm: bool
     should_install_mcp: bool
+    should_install_lsp: bool
     only_packages: tuple[str, ...] | None
 
     @classmethod
@@ -27,10 +29,12 @@ class ProspectiveInstallPlan:
         apm_dependencies: Sequence[DependencyReference],
         dev_apm_dependencies: Sequence[DependencyReference],
         mcp_dependencies: Sequence[Any],
+        lsp_dependencies: Sequence[Any],
         validated_additions: Sequence[str],
         additions_are_dev: bool,
         should_install_apm: bool,
         should_install_mcp: bool,
+        should_install_lsp: bool,
         only_packages: Sequence[str] | None,
     ) -> ProspectiveInstallPlan:
         """Build the preview from manifest dependencies and validated CLI additions."""
@@ -46,8 +50,10 @@ class ProspectiveInstallPlan:
             apm_dependencies=prospective_apm_dependencies,
             dev_apm_dependencies=prospective_dev_apm_dependencies,
             mcp_dependencies=tuple(mcp_dependencies),
+            lsp_dependencies=tuple(lsp_dependencies),
             should_install_apm=should_install_apm,
             should_install_mcp=should_install_mcp,
+            should_install_lsp=should_install_lsp,
             only_packages=tuple(only_packages) if only_packages is not None else None,
         )
 
@@ -65,6 +71,22 @@ class ProspectiveInstallPlan:
     def mcp_dependency_count(self) -> int:
         """Return the number of MCP dependencies selected for preview."""
         return len(self.mcp_dependencies) if self.should_install_mcp else 0
+
+    @property
+    def lsp_dependency_count(self) -> int:
+        """Return the number of LSP dependencies selected for preview."""
+        return len(self.lsp_dependencies) if self.should_install_lsp else 0
+
+    @property
+    def has_selected_dependencies(self) -> bool:
+        """Return whether the prospective install includes selected dependencies."""
+        return any(
+            (
+                self.apm_dependency_count,
+                self.mcp_dependency_count,
+                self.lsp_dependency_count,
+            )
+        )
 
     @property
     def intended_dependency_keys(self) -> frozenset[str]:

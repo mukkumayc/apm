@@ -1325,11 +1325,19 @@ dry_run_plan_renderer="src/apm_cli/install/presentation/dry_run.py"
 if ! grep -q '^@dataclass(frozen=True)' "$dry_run_plan_owner" \
     || [ "$(grep -c '^class ProspectiveInstallPlan:' "$dry_run_plan_owner")" -ne 1 ] \
     || [ "$(grep -c '^    def from_manifest_and_validated_additions(' "$dry_run_plan_owner")" -ne 1 ] \
+    || ! grep -q 'lsp_dependencies:' "$dry_run_plan_owner" \
+    || ! grep -q 'should_install_lsp:' "$dry_run_plan_owner" \
+    || ! grep -q 'lsp_dependency_count' "$dry_run_plan_owner" \
     || ! grep -q 'ProspectiveInstallPlan\.from_manifest_and_validated_additions(' \
         "$dry_run_plan_adapter" \
+    || ! grep -q 'lsp_dependencies=lsp_deps,' "$dry_run_plan_adapter" \
+    || ! grep -q 'if scope is InstallScope.USER and not dry_run:' "$dry_run_plan_adapter" \
+    || ! grep -q 'if not apm_yml_exists and packages and not dry_run:' "$dry_run_plan_adapter" \
     || ! grep -q 'plan: ProspectiveInstallPlan' "$dry_run_plan_renderer" \
-    || grep -q 'DependencyReference\.parse' "$dry_run_plan_renderer"; then
-    echo "[x] Dry-run previews must use ProspectiveInstallPlan for manifest additions and orphan intent"
+    || ! grep -q 'plan\.lsp_dependencies' "$dry_run_plan_renderer" \
+    || ! grep -q 'plan\.lsp_dependency_count' "$dry_run_plan_renderer" \
+    || grep -Eq 'DependencyReference\.parse|get_lsp_dependencies' "$dry_run_plan_renderer"; then
+    echo "[x] Dry-run previews must use ProspectiveInstallPlan for selected dependency kinds, orphan intent, and no-write bootstrap"
     violations=$((violations + 1))
 fi
 

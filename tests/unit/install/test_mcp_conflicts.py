@@ -175,16 +175,20 @@ class TestE2GlobalNotSupportedForMcp:
 
 
 # ---------------------------------------------------------------------------
-# E3 - --only apm conflicts with --mcp
+# E3 - only MCP selection is compatible with --mcp
 # ---------------------------------------------------------------------------
 
 
-class TestE3OnlyApmConflictsWithMcp:
+class TestE3OnlyConflictsWithMcp:
     def test_only_apm_raises(self) -> None:
         with pytest.raises(click.UsageError, match=r"cannot use --only apm with --mcp"):
             _call(only="apm")
 
-    def test_only_other_value_ok(self) -> None:
+    def test_only_lsp_raises(self) -> None:
+        with pytest.raises(click.UsageError, match=r"cannot use --only lsp with --mcp"):
+            _call(only="lsp")
+
+    def test_only_mcp_ok(self) -> None:
         _call(only="mcp")
 
     def test_only_none_ok(self) -> None:

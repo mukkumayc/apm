@@ -444,10 +444,10 @@ class TestInstallCommandAutoBootstrap:
     @patch("apm_cli.commands.install.APM_DEPS_AVAILABLE", True)
     @patch("apm_cli.commands.install.APMPackage")
     @patch("apm_cli.commands.install._install_apm_dependencies")
-    def test_install_dry_run_with_no_apm_yml_shows_what_would_be_created(
+    def test_install_dry_run_with_no_apm_yml_does_not_bootstrap_manifest(
         self, mock_install_apm, mock_apm_package, mock_validate
     ):
-        """Test that dry-run with no apm.yml shows what would be created."""
+        """Dry-run previews a package without bootstrapping a manifest."""
         with self._chdir_tmp():
             mock_validate.return_value = True
 
@@ -458,11 +458,9 @@ class TestInstallCommandAutoBootstrap:
 
             result = self.runner.invoke(cli, ["install", "test/package", "--dry-run"])
 
-            # Should show what would be added
             assert result.exit_code == 0
             assert "Would add" in result.output or "Dry run" in result.output
-            # Dry-run preserves the bootstrap configuration for the next run.
-            assert Path("apm.yml").exists()
+            assert not Path("apm.yml").exists()
 
     def test_positional_local_package_dry_run_previews_validated_addition(self):
         """Dry-run renders a validated local addition without changing the project."""
