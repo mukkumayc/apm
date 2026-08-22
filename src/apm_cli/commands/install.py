@@ -21,7 +21,7 @@ from apm_cli.install.argv import (
     _split_argv_at_double_dash,
 )
 from apm_cli.install.artifactory_resolver import _resolve_artifactory_boundary
-from apm_cli.install.dry_run_plan import ProspectiveInstallPlan
+from apm_cli.install.dry_run_plan import ProspectiveInstallPlan, load_dry_run_package
 from apm_cli.install.errors import (
     AuthenticationError,
     DirectDependencyError,
@@ -1729,15 +1729,8 @@ def _install_apm_packages(ctx, outcome):
 
     # Parse apm.yml to get both APM and MCP dependencies
     try:
-        if ctx.dry_run and not ctx.manifest_path.exists():
-            apm_package = APMPackage.from_mapping(
-                {
-                    "name": "dry-run",
-                    "version": "0.0.0",
-                    "dependencies": {},
-                },
-                package_path=ctx.manifest_path.parent,
-            )
+        if ctx.dry_run:
+            apm_package = load_dry_run_package(ctx.manifest_path)
         else:
             apm_package = APMPackage.from_apm_yml(ctx.manifest_path)
     except click.UsageError:
@@ -1758,16 +1751,13 @@ def _install_apm_packages(ctx, outcome):
     if not isinstance(lsp_deps, builtins.list):
         logger.verbose_detail("LSP dependencies were not a list; defaulting to empty")
         lsp_deps = []
-
     logger.verbose_detail(
         f"Parsed {APM_YML_FILENAME}: {len(apm_deps)} APM deps, "
         f"{len(prod_mcp_deps)} MCP deps, {len(lsp_deps)} LSP deps"
         + (f", {len(dev_apm_deps)} dev APM deps" if dev_apm_deps else "")
         + (f", {len(dev_mcp_deps)} dev MCP deps" if dev_mcp_deps else "")
     )
-
     has_any_apm_deps = bool(apm_deps) or bool(dev_apm_deps)
-
     all_apm_deps = list(apm_deps) + list(dev_apm_deps)
 
     if ctx.frozen is True:

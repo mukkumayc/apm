@@ -4,9 +4,21 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
+from apm_cli.models.apm_package import APMPackage
 from apm_cli.models.dependency.reference import DependencyReference
+
+
+def load_dry_run_package(manifest_path: Path) -> APMPackage:
+    """Load a manifest or an in-memory empty package without creating either."""
+    if manifest_path.exists():
+        return APMPackage.from_apm_yml(manifest_path)
+    return APMPackage.from_mapping(
+        {"name": "dry-run", "version": "0.0.0", "dependencies": {}},
+        package_path=manifest_path.parent,
+    )
 
 
 @dataclass(frozen=True)
