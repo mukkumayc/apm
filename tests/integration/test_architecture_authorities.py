@@ -928,6 +928,64 @@ def test_frozen_install_decisions_have_single_owner() -> None:
     assert "Frozen install decisions must route through InstallService before mutation" in guard
 
 
+def test_prospective_dry_run_plan_has_single_owner() -> None:
+    """Dry-run consumers must route manifest additions through one frozen plan."""
+    root = Path(__file__).parents[2]
+    owner = (root / "src/apm_cli/install/dry_run_plan.py").read_text(encoding="utf-8")
+    adapter = (root / "src/apm_cli/commands/install.py").read_text(encoding="utf-8")
+    renderer = (root / "src/apm_cli/install/presentation/dry_run.py").read_text(encoding="utf-8")
+    guard = (root / "scripts/lint-architecture-boundaries.sh").read_text(encoding="utf-8")
+    owner_table = (root / ".apm/instructions/architecture.instructions.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert owner.count("class ProspectiveInstallPlan:") == 1
+    assert owner.count("def from_manifest_and_validated_additions(") == 1
+    assert "ProspectiveInstallPlan.from_manifest_and_validated_additions(" in adapter
+    assert "plan: ProspectiveInstallPlan" in renderer
+    assert "DependencyReference.parse" not in renderer
+    assert "Prospective dry-run install plan" in owner_table
+    assert "Dry-run previews must use ProspectiveInstallPlan" in guard
+
+
+def test_prospective_dry_run_plan_guard_rejects_renderer_reparsing(
+    tmp_path: Path,
+) -> None:
+    """The boundary lint rejects a renderer that recomputes preview additions."""
+    root = Path(__file__).parents[2]
+    sandbox = tmp_path / "repo"
+    shutil.copytree(
+        root,
+        sandbox,
+        ignore=shutil.ignore_patterns(
+            ".git",
+            ".venv",
+            ".pytest_cache",
+            "__pycache__",
+            "build",
+            "dist",
+            "node_modules",
+        ),
+    )
+    renderer_path = sandbox / "src/apm_cli/install/presentation/dry_run.py"
+    renderer_path.write_text(
+        renderer_path.read_text(encoding="utf-8") + "\nDependencyReference.parse('owner/repo')\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ("bash", "scripts/lint-architecture-boundaries.sh"),
+        cwd=sandbox,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert result.returncode == 1
+    assert "Dry-run previews must use ProspectiveInstallPlan" in result.stdout
+
+
 def test_lifecycle_marker_partition_is_collection_derived() -> None:
     """Lifecycle membership must come from independent pytest collections."""
     root = Path(__file__).parents[2]

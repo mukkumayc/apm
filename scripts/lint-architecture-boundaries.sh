@@ -1317,6 +1317,22 @@ if ! grep -q '^    def enforce_frozen(' "$frozen_owner" \
     [ -n "$frozen_duplicate_hits" ] && echo "$frozen_duplicate_hits"
     violations=$((violations + 1))
 fi
+
+echo "[*] AC34: prospective dry-run install plan authority"
+dry_run_plan_owner="src/apm_cli/install/dry_run_plan.py"
+dry_run_plan_adapter="src/apm_cli/commands/install.py"
+dry_run_plan_renderer="src/apm_cli/install/presentation/dry_run.py"
+if ! grep -q '^@dataclass(frozen=True)' "$dry_run_plan_owner" \
+    || [ "$(grep -c '^class ProspectiveInstallPlan:' "$dry_run_plan_owner")" -ne 1 ] \
+    || [ "$(grep -c '^    def from_manifest_and_validated_additions(' "$dry_run_plan_owner")" -ne 1 ] \
+    || ! grep -q 'ProspectiveInstallPlan\.from_manifest_and_validated_additions(' \
+        "$dry_run_plan_adapter" \
+    || ! grep -q 'plan: ProspectiveInstallPlan' "$dry_run_plan_renderer" \
+    || grep -q 'DependencyReference\.parse' "$dry_run_plan_renderer"; then
+    echo "[x] Dry-run previews must use ProspectiveInstallPlan for manifest additions and orphan intent"
+    violations=$((violations + 1))
+fi
+
 echo "[*] AC25: root vs dependency MCP declaration-scope authority"
 mcp_scope_owner="src/apm_cli/integration/mcp_config_view.py"
 mcp_root_scope_body=$(awk '
