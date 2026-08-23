@@ -3731,6 +3731,105 @@ def test_mcp_runtime_argument_variable_guard_rejects_parallel_owner(tmp_path: Pa
     assert "MCP runtime argument variables must route through MCPClientAdapter" in result.stdout
 
 
+def test_revision_pin_resolution_has_single_owner() -> None:
+    """Revision-pin skips and updates must come from one typed resolver outcome."""
+    root = Path(__file__).parents[2]
+    owner = (root / "src/apm_cli/deps/revision_pins.py").read_text(encoding="utf-8")
+    command = (root / "src/apm_cli/commands/update.py").read_text(encoding="utf-8")
+    guard = (root / "scripts/lint-architecture-boundaries.sh").read_text(encoding="utf-8")
+    owner_table = (root / ".github/instructions/architecture.instructions.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert owner.count("class RevisionPinResolutionResult:") == 1
+    assert owner.count("class RevisionPinSkip:") == 1
+    assert owner.count("def resolve_revision_pin_updates(") == 1
+    assert "return RevisionPinResolutionResult(" in owner
+    assert "resolution = resolve_revision_pin_updates(" in command
+    assert "for skipped in resolution.skips:" in command
+    assert "find_latest_annotated_tag(" not in command
+    assert "Revision-pin update outcome (updates vs retained SHA pins)" in owner_table
+    assert "Revision-pin outcomes must route through RevisionPinResolutionResult" in guard
+
+
+def test_revision_pin_resolution_guard_rejects_command_skip_bypass(tmp_path: Path) -> None:
+    """The boundary lint rejects discarding resolver-provided retained pins."""
+    root = Path(__file__).parents[2]
+    sandbox = tmp_path / "repo"
+    shutil.copytree(
+        root,
+        sandbox,
+        ignore=shutil.ignore_patterns(
+            ".git",
+            ".venv",
+            ".pytest_cache",
+            "__pycache__",
+            "build",
+            "dist",
+            "node_modules",
+        ),
+    )
+    command_path = sandbox / "src/apm_cli/commands/update.py"
+    command_path.write_text(
+        command_path.read_text(encoding="utf-8").replace(
+            "for skipped in resolution.skips:",
+            "for skipped in ():",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ("bash", "scripts/lint-architecture-boundaries.sh"),
+        cwd=sandbox,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert result.returncode == 1
+    assert "Revision-pin outcomes must route through RevisionPinResolutionResult" in result.stdout
+
+
+def test_revision_pin_resolution_guard_rejects_direct_tag_lookup_in_command(
+    tmp_path: Path,
+) -> None:
+    """The command cannot restore an independent annotated-tag decision."""
+    root = Path(__file__).parents[2]
+    sandbox = tmp_path / "repo"
+    shutil.copytree(
+        root,
+        sandbox,
+        ignore=shutil.ignore_patterns(
+            ".git",
+            ".venv",
+            ".pytest_cache",
+            "__pycache__",
+            "build",
+            "dist",
+            "node_modules",
+        ),
+    )
+    command_path = sandbox / "src/apm_cli/commands/update.py"
+    command_path.write_text(
+        command_path.read_text(encoding="utf-8") + "\n# find_latest_annotated_tag(\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        ("bash", "scripts/lint-architecture-boundaries.sh"),
+        cwd=sandbox,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=300,
+    )
+
+    assert result.returncode == 1
+    assert "Revision-pin outcomes must route through RevisionPinResolutionResult" in result.stdout
+
+
 def test_bootstrap_project_names_have_single_owner() -> None:
     """All generated manifest names must route through the shared resolver."""
     root = Path(__file__).parents[2]

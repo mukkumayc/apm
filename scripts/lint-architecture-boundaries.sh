@@ -1599,6 +1599,24 @@ if [ "$mcp_runtime_variable_owner_defs" -ne 1 ] \
     violations=$((violations + 1))
 fi
 
+echo "[*] AC34: revision-pin resolution outcome authority"
+revision_pin_owner="src/apm_cli/deps/revision_pins.py"
+revision_pin_command="src/apm_cli/commands/update.py"
+revision_pin_result_defs=$(grep -rEc --include='*.py' \
+    '^class RevisionPinResolutionResult:' src/apm_cli | awk -F: '{sum += $2} END {print sum + 0}')
+revision_pin_skip_defs=$(grep -rEc --include='*.py' \
+    '^class RevisionPinSkip:' src/apm_cli | awk -F: '{sum += $2} END {print sum + 0}')
+if [ "$revision_pin_result_defs" -ne 1 ] \
+    || [ "$revision_pin_skip_defs" -ne 1 ] \
+    || ! grep -q '^def resolve_revision_pin_updates(' "$revision_pin_owner" \
+    || ! grep -q 'return RevisionPinResolutionResult(' "$revision_pin_owner" \
+    || ! grep -q 'resolution = resolve_revision_pin_updates(' "$revision_pin_command" \
+    || ! grep -q 'for skipped in resolution.skips:' "$revision_pin_command" \
+    || grep -q 'find_latest_annotated_tag(' "$revision_pin_command"; then
+    echo "[x] Revision-pin outcomes must route through RevisionPinResolutionResult"
+    violations=$((violations + 1))
+fi
+
 echo "[*] AC18: bootstrap project-name authority"
 if ! uv run --extra dev python scripts/lint-bootstrap-project-name.py; then
     echo "[x] Manifest bootstrap names must route through core/project_name.py"
