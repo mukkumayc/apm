@@ -351,7 +351,7 @@ The canonical set of `target` identifiers registered by this
 specification at v0.1 is:
 
 ```
-copilot, claude, cursor, codex, gemini, antigravity, opencode, windsurf, agent-skills, all
+copilot, claude, cursor, codex, gemini, antigravity, opencode, windsurf, agent-skills, kiro, grok-build, copilot-cowork, vscode, all
 ```
 
 The legacy aliases `vscode` and `agents` MAY appear in input manifests
@@ -366,8 +366,8 @@ registered **auto-detectable** target (see
 **auto-detectable** when the OpenAPM Target Registry publishes at
 least one detection predicate for it; a target registered without a
 detection predicate is **explicit-only** and MUST be selected
-explicitly. At v0.1 the explicit-only targets are `agent-skills` and
-`antigravity`, so `all` excludes them.
+explicitly. At v0.1 the explicit-only targets are `agent-skills`,
+`antigravity`, and `copilot-cowork`, so `all` excludes them.
 
 Concrete per-target detection signals and deploy roots are documented
 in the non-normative companion **"OpenAPM Target Registry v0.1"**
@@ -2296,7 +2296,8 @@ A target registered without a detection predicate
 MUST NOT be auto-detected and MUST be excluded from the expansion of
 `all`; such an **explicit-only** target MUST be selected explicitly
 via `--target <name>` or via the manifest's `target:` field. At v0.1
-the explicit-only targets are `agent-skills` and `antigravity`. When
+the explicit-only targets are `agent-skills`, `antigravity`, and
+`copilot-cowork`. When
 no detection signal fires, the consumer MAY fall back to a `minimal`
 profile that emits `AGENTS.md` only.
 
@@ -3674,7 +3675,7 @@ renumbering of conformance classes.
 | 0.1.31  | 2026-08-23 | Spec-citation fold for Azure DevOps organization-policy discovery. Added [req-pl-017] (Section 6.8, governance MUST): discovery uses `apm/apm-policy` first and can use legacy `_apm/_apm` only after an HTTP 404; all non-404 failures stop without fallback, and a successful legacy fallback emits one actionable migration warning. Section 6.9, Section 11.3.4, and Appendix C updated. Statement count: 114 -> 115 (110 MUST, 5 SHOULD). |
 | 0.1.32  | 2026-08-23 | Spec-citation fold for authoritative legacy plugin skill declarations (closes #2537). Added [req-pr-006] (Section 8.1, consumer MUST): omitted `skills` alone enables conventional discovery; a string or list replaces discovery; explicit empty, invalid, escaping, symlinked, and duplicate-derived entries contribute no skills; declared containers contribute only immediate child skills; and only resulting names are eligible for enumeration, selection, or deployment. Section 8.7, Section 11.3.2, Appendix C, and conformance coverage updated. Statement count: 115 -> 116 (111 MUST, 5 SHOULD). |
 | 0.1.33  | 2026-08-23 | Spec-citation fold for authorized pre-deployment scan scope (closes #2490 Mode-B silent-extension gate). Added [req-sc-015] (Section 10.16, consumer MUST): a consumer derives one post-authorization source-file set for every install and uninstall re-integration materialization lifecycle; excludes symlink files and does not traverse symlinked directories; scans and materializes only that set; rejects a selected blocking finding before a source-derived target write; and does not scan or materialize source-only package files. Added row 20 to the Section 10.11 summary table. Reconciled with concurrent [req-pl-017] and [req-pr-006] and retained all amendments. Section 1.3, Section 11.3.2, and Appendix C updated. Statement count: 116 -> 117 (112 MUST, 5 SHOULD). |
-| 0.1.34  | 2026-08-25 | Spec-citation fold for root-declared Plugin component staging containment (closes #2556). Added [req-pr-007] (Section 8.1, consumer MUST): a consumer canonicalizes the non-symlink component-source root and prunes the current operation's materialization subtree before traversal. Section 8.7, Section 11.3.2, Appendix C, and conformance coverage updated. Statement count: 117 -> 118 (113 MUST, 5 SHOULD). |
+| 0.1.34  | 2026-08-25 | Spec-citation fold for root-declared Plugin component staging containment (closes #2556) and canonical target-set reconciliation. Added [req-pr-007] (Section 8.1, consumer MUST): a consumer canonicalizes the non-symlink component-source root and prunes the current operation's materialization subtree before traversal. Section 4.2.1: reconciled the canonical `target` set with the OpenAPM Target Registry by adding `kiro`, `grok-build`, and `copilot-cowork`; Sections 4.2.1 and 8.4 also add `copilot-cowork` to the v0.1 explicit-only set alongside `agent-skills` and `antigravity`, so [req-tg-001] excludes it from the expansion of `all`. Section 8.7, Section 11.3.2, Appendix C, and conformance coverage updated. Statement count: 117 -> 118 (113 MUST, 5 SHOULD). |
 
 Errata (none at publication).
 
