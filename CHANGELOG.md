@@ -33,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `apm doctor` now reports malformed project executable-trust configuration
   under either `executables` or the deprecated `allowExecutables` key as an
   actionable informational warning instead of omitting the check. (#2719)
+- Agent discovery now preserves nested agent paths, validates plain Markdown
+  definitions by `name` and `description` frontmatter, and warns when sibling
+  resources cannot be deployed. (closes #2692)
 
 ## [0.29.0] - 2026-08-30
 
