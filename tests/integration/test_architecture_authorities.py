@@ -150,6 +150,9 @@ def test_agent_source_admission_and_inventory_have_single_owner() -> None:
     root = Path(__file__).parents[2]
     owner = (root / "src/apm_cli/integration/agent_integrator.py").read_text(encoding="utf-8")
     services = (root / "src/apm_cli/install/services.py").read_text(encoding="utf-8")
+    preparation = (root / "src/apm_cli/install/primitive_integration.py").read_text(
+        encoding="utf-8"
+    )
     guard = (root / "scripts/lint-architecture-boundaries.sh").read_text(encoding="utf-8")
     architecture = (root / ".github/instructions/architecture.instructions.md").read_text(
         encoding="utf-8"
@@ -158,7 +161,8 @@ def test_agent_source_admission_and_inventory_have_single_owner() -> None:
     assert owner.count("def _is_plain_md_agent(") == 1
     assert owner.count("def _source_agent_relpath(") == 1
     assert owner.count("def prepare_agent_files(") == 1
-    assert '"agent_files": integrator.prepare_agent_files(' in services
+    assert '"agent_files": integrator.prepare_agent_files(' in preparation
+    assert "prepare_primitive_inputs as _prepare_primitive_inputs" in services
     assert "Agent admission, relative identity, and inventory must route through" in guard
     assert "| Agent source admission, relative identity, and package-level inventory |" in (
         architecture
