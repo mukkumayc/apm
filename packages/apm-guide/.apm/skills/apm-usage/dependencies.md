@@ -562,12 +562,13 @@ Optional fields: `args`, `transport`, `env`, `initializationOptions`,
 `settings`, `workspaceFolder`, `startupTimeout`, `shutdownTimeout`,
 `restartOnCrash`, `maxRestarts`.
 
-`apm install` writes LSP config to the detected runtime targets:
-Claude Code uses `.lsp.json` or `~/.claude.json`, and GitHub Copilot CLI
-uses `.github/lsp.json` or `~/.copilot/lsp-config.json`. Copilot CLI
-uses `fileExtensions` on disk; manifests continue to use
-`extensionToLanguage`. Plugin `.lsp.json` files may use either a flat
-server map or a `{ "lspServers": { ... } }` envelope.
+`apm install` writes LSP config to the detected runtime targets. Claude Code
+project installs use the `lspServers` section in
+`.claude/skills/apm-lsp/.claude-plugin/plugin.json`; global installs use
+`~/.claude.json`. GitHub Copilot CLI uses `.github/lsp.json` or
+`~/.copilot/lsp-config.json`. Copilot CLI uses `fileExtensions` on disk;
+manifests continue to use `extensionToLanguage`. Plugin `.lsp.json` files may
+use either a flat server map or a `{ "lspServers": { ... } }` envelope.
 
 ## Version pinning
 

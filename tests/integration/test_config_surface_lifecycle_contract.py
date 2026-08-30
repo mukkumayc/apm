@@ -29,6 +29,8 @@ pytestmark = [
     pytest.mark.requires_apm_binary,
 ]
 
+_CLAUDE_LSP_PLUGIN = Path(".claude") / "skills" / "apm-lsp" / ".claude-plugin" / "plugin.json"
+
 
 def _runner(apm_binary_path: Path) -> ApmLifecycleRunner:
     """Return the bounded real-binary runner for one lifecycle scenario."""
@@ -954,6 +956,49 @@ def test_lsp_reinstall_and_update_keep_copilot_state_deterministic(
     )
 
 
+def test_claude_lsp_install_writes_discoverable_skills_directory_plugin(
+    tmp_path: Path,
+    apm_binary_path: Path,
+) -> None:
+    """Claude LSP install must emit the plugin manifest Claude discovers."""
+    fixture = _create_git_lifecycle_project(
+        tmp_path / "claude-lsp-discovery",
+        source_name="claude-lsp-source",
+        lsp_dependencies=(
+            {
+                "name": "basedpyright",
+                "command": "uv",
+                "args": ["run", "basedpyright-langserver", "--stdio"],
+                "extensionToLanguage": {".py": "python", ".pyi": "python"},
+            },
+        ),
+        targets=("claude",),
+    )
+
+    _runner(apm_binary_path).run_sequence(
+        (("install", "--no-policy"),),
+        expected_returncodes=(0,),
+        scenario_id="claude-lsp-discovery",
+        cwd=fixture.project_root,
+        env=fixture.isolated.subprocess_env(),
+    )
+
+    plugin_path = (
+        fixture.project_root / ".claude" / "skills" / "apm-lsp" / ".claude-plugin" / "plugin.json"
+    )
+    assert json.loads(plugin_path.read_text(encoding="utf-8")) == {
+        "name": "apm-lsp",
+        "lspServers": {
+            "basedpyright": {
+                "command": "uv",
+                "args": ["run", "basedpyright-langserver", "--stdio"],
+                "extensionToLanguage": {".py": "python", ".pyi": "python"},
+            }
+        },
+    }
+    assert not (fixture.project_root / ".lsp.json").exists()
+
+
 def test_saved_target_drives_package_mcp_lsp_update_audit_and_uninstall(
     tmp_path: Path,
     apm_binary_path: Path,
@@ -994,12 +1039,12 @@ def test_saved_target_drives_package_mcp_lsp_update_audit_and_uninstall(
         env=environment,
     )
     claude_mcp = fixture.project_root / ".mcp.json"
-    claude_lsp = fixture.project_root / ".lsp.json"
+    claude_lsp = fixture.project_root / _CLAUDE_LSP_PLUGIN
     claude_instruction = (
         fixture.project_root / ".claude" / "rules" / "saved-target-source-instruction.md"
     )
     assert server_name in json.loads(claude_mcp.read_text(encoding="utf-8"))["mcpServers"]
-    assert lsp_name in json.loads(claude_lsp.read_text(encoding="utf-8"))
+    assert lsp_name in json.loads(claude_lsp.read_text(encoding="utf-8"))["lspServers"]
     assert claude_instruction.is_file()
 
     first_mcp = claude_mcp.read_bytes()
@@ -1024,7 +1069,7 @@ def test_saved_target_drives_package_mcp_lsp_update_audit_and_uninstall(
         env=environment,
     )
     assert server_name in json.loads(claude_mcp.read_text(encoding="utf-8"))["mcpServers"]
-    assert lsp_name in json.loads(claude_lsp.read_text(encoding="utf-8"))
+    assert lsp_name in json.loads(claude_lsp.read_text(encoding="utf-8"))["lspServers"]
 
     source_manifest = load_yaml(fixture.repository.worktree / "apm.yml")
     source_manifest["version"] = "0.2.0"
@@ -1053,7 +1098,7 @@ def test_saved_target_drives_package_mcp_lsp_update_audit_and_uninstall(
     )
     assert claude_instruction.is_file()
     assert server_name in json.loads(claude_mcp.read_text(encoding="utf-8"))["mcpServers"]
-    assert lsp_name in json.loads(claude_lsp.read_text(encoding="utf-8"))
+    assert lsp_name in json.loads(claude_lsp.read_text(encoding="utf-8"))["lspServers"]
     runner.run_sequence(
         (install, ("audit", "--ci")),
         expected_returncodes=(0, 0),
@@ -1236,10 +1281,10 @@ def test_saved_target_drives_declared_mcp_and_lsp_without_package(
     )
 
     assert (project.root / ".mcp.json").is_file()
-    assert (project.root / ".lsp.json").is_file()
+    assert (project.root / _CLAUDE_LSP_PLUGIN).is_file()
 
     (project.root / ".mcp.json").unlink()
-    (project.root / ".lsp.json").unlink()
+    (project.root / _CLAUDE_LSP_PLUGIN).unlink()
     runner.run_sequence(
         (("update", "--yes"),),
         expected_returncodes=(0,),
@@ -1248,7 +1293,7 @@ def test_saved_target_drives_declared_mcp_and_lsp_without_package(
         env=environment,
     )
     assert (project.root / ".mcp.json").is_file()
-    assert (project.root / ".lsp.json").is_file()
+    assert (project.root / _CLAUDE_LSP_PLUGIN).is_file()
 
     manifest = load_yaml(project.manifest_path)
     manifest["dependencies"].pop("mcp")
@@ -1265,8 +1310,11 @@ def test_saved_target_drives_declared_mcp_and_lsp_without_package(
         "saved-declared-mcp"
         not in json.loads((project.root / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
     )
-    assert "saved-declared-lsp" not in json.loads(
-        (project.root / ".lsp.json").read_text(encoding="utf-8")
+    assert (
+        "saved-declared-lsp"
+        not in json.loads((project.root / _CLAUDE_LSP_PLUGIN).read_text(encoding="utf-8"))[
+            "lspServers"
+        ]
     )
 
 
@@ -1464,7 +1512,7 @@ def test_lsp_write_failure_is_nonzero(
             },
         ),
     )
-    (project.root / ".lsp.json").mkdir()
+    (project.root / _CLAUDE_LSP_PLUGIN).mkdir(parents=True)
     runner = _runner(apm_binary_path)
     environment = isolated.subprocess_env()
     runner.run_sequence(
@@ -1532,7 +1580,7 @@ def test_manifest_and_explicit_target_precedence_for_mcp_and_lsp(
     assert (project.root / ".github" / "mcp.json").is_file()
     assert (project.root / ".github" / "lsp.json").is_file()
     assert not (project.root / ".mcp.json").exists()
-    assert not (project.root / ".lsp.json").exists()
+    assert not (project.root / _CLAUDE_LSP_PLUGIN).exists()
 
     runner.run_sequence(
         (("install", "--target", "claude", "--no-policy"),),
@@ -1542,7 +1590,7 @@ def test_manifest_and_explicit_target_precedence_for_mcp_and_lsp(
         env=environment,
     )
     assert (project.root / ".mcp.json").is_file()
-    assert (project.root / ".lsp.json").is_file()
+    assert (project.root / _CLAUDE_LSP_PLUGIN).is_file()
 
 
 def test_multi_target_exclusion_applies_to_mcp_and_lsp(
@@ -1593,7 +1641,7 @@ def test_multi_target_exclusion_applies_to_mcp_and_lsp(
     )
 
     assert (project.root / ".mcp.json").is_file()
-    assert (project.root / ".lsp.json").is_file()
+    assert (project.root / _CLAUDE_LSP_PLUGIN).is_file()
     assert not (project.root / ".vscode" / "mcp.json").exists()
     assert not (project.root / ".github" / "lsp.json").exists()
 
@@ -1641,7 +1689,7 @@ def test_explicit_runtime_alias_overrides_saved_target_for_all_phases(
     )
 
     assert (project.root / ".mcp.json").is_file()
-    assert (project.root / ".lsp.json").is_file()
+    assert (project.root / _CLAUDE_LSP_PLUGIN).is_file()
     assert not (project.root / ".vscode" / "mcp.json").exists()
     assert not (project.root / ".github" / "lsp.json").exists()
 
@@ -1726,7 +1774,7 @@ def test_frozen_failure_writes_no_package_or_service_state(
     assert not (fixture.project_root / "apm_modules").exists()
     assert not (fixture.project_root / ".claude").exists()
     assert not (fixture.project_root / ".mcp.json").exists()
-    assert not (fixture.project_root / ".lsp.json").exists()
+    assert not (fixture.project_root / _CLAUDE_LSP_PLUGIN).exists()
 
 
 def test_unresolved_package_services_fail_before_package_deployment(
@@ -1770,7 +1818,7 @@ def test_unresolved_package_services_fail_before_package_deployment(
     modules = fixture.project_root / "apm_modules"
     assert not modules.exists() or not any(modules.rglob("*"))
     assert not (fixture.project_root / ".mcp.json").exists()
-    assert not (fixture.project_root / ".lsp.json").exists()
+    assert not (fixture.project_root / _CLAUDE_LSP_PLUGIN).exists()
 
 
 def test_uninstalling_one_shared_root_retains_shared_dependency_ownership(
