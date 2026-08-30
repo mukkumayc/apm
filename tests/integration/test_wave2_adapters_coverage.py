@@ -4036,7 +4036,7 @@ class TestDependencyTypes:
 
 
 class TestMCPConflictMatrix:
-    """Tests for MCP flag conflict validation (E1-E15)."""
+    """Tests for MCP flag conflict validation."""
 
     def _base_kwargs(self, **overrides) -> dict:
         """Return base valid kwargs for validate_mcp_conflicts."""
@@ -4050,7 +4050,6 @@ class TestMCPConflictMatrix:
             "headers": {},
             "mcp_version": None,
             "command_argv": None,
-            "global_": False,
             "only": None,
             "update": False,
             "any_transport_flag": False,
@@ -4121,15 +4120,6 @@ class TestMCPConflictMatrix:
 
         with pytest.raises(click.UsageError, match="cannot mix"):
             validate_mcp_conflicts(**self._base_kwargs(pre_dash_packages=["owner/repo"]))
-
-    def test_e2_global_with_mcp(self) -> None:
-        """--global with --mcp raises UsageError."""
-        import click
-
-        from apm_cli.install.mcp.conflicts import validate_mcp_conflicts
-
-        with pytest.raises(click.UsageError, match="--global is not supported"):
-            validate_mcp_conflicts(**self._base_kwargs(global_=True))
 
     def test_e3_only_apm_with_mcp(self) -> None:
         """--only apm with --mcp raises UsageError."""

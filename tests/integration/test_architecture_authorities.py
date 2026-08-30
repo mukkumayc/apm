@@ -3023,6 +3023,71 @@ def test_architecture_mcp_manifest_targets_route_through_catalog_parser() -> Non
     )
 
 
+def test_direct_mcp_scope_routes_from_install_command() -> None:
+    """The direct MCP branch must consume the install command's scope decision."""
+    root = Path(__file__).parents[2]
+    command_tree = ast.parse((root / "src/apm_cli/commands/install.py").read_text(encoding="utf-8"))
+    conflict_tree = ast.parse(
+        (root / "src/apm_cli/install/mcp/conflicts.py").read_text(encoding="utf-8")
+    )
+    install = next(
+        node
+        for node in command_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "install"
+    )
+    handler = next(
+        node
+        for node in command_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_handle_mcp_install"
+    )
+    validator = next(
+        node
+        for node in conflict_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "validate_mcp_conflicts"
+    )
+    scope_assignments = [
+        node
+        for node in ast.walk(install)
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "scope" for target in node.targets)
+    ]
+    handler_call = next(
+        node
+        for node in ast.walk(install)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_handle_mcp_install"
+    )
+    run_call = next(
+        node
+        for node in ast.walk(handler)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_run_mcp_install"
+    )
+    guard = (root / "scripts/lint-architecture-boundaries.sh").read_text(encoding="utf-8")
+    architecture = (root / ".github/instructions/architecture.instructions.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert len(scope_assignments) == 1
+    assert any(
+        keyword.arg == "scope"
+        and isinstance(keyword.value, ast.Name)
+        and keyword.value.id == "scope"
+        for keyword in handler_call.keywords
+    )
+    assert any(
+        keyword.arg == "scope"
+        and isinstance(keyword.value, ast.Name)
+        and keyword.value.id == "scope"
+        for keyword in run_call.keywords
+    )
+    assert "global_" not in {arg.arg for arg in validator.args.kwonlyargs}
+    assert "Direct MCP installs must consume the install command scope" in guard
+    assert "Install command scope selection" in architecture
+
+
 def test_behavioral_taxonomy_is_owned_by_module_pytestmark() -> None:
     """Distributed module markers must not regress to a central file list."""
     root = Path(__file__).parents[2]

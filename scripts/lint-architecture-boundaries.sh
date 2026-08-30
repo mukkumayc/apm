@@ -1483,6 +1483,107 @@ if ! grep -q 'parse_targets_field(apm_config)' <<<"$mcp_manifest_adapter" \
     echo "[x] MCP target precedence must route through the canonical manifest adapter before discovery"
     violations=$((violations + 1))
 fi
+echo "[*] AC21a: direct MCP install scope authority"
+direct_mcp_scope_output=$(python3 - <<'PY'
+import ast
+from pathlib import Path
+
+command_tree = ast.parse(
+    Path("src/apm_cli/commands/install.py").read_text(encoding="utf-8")
+)
+conflict_tree = ast.parse(
+    Path("src/apm_cli/install/mcp/conflicts.py").read_text(encoding="utf-8")
+)
+install = next(
+    node
+    for node in command_tree.body
+    if isinstance(node, ast.FunctionDef) and node.name == "install"
+)
+handler = next(
+    node
+    for node in command_tree.body
+    if isinstance(node, ast.FunctionDef) and node.name == "_handle_mcp_install"
+)
+validator = next(
+    node
+    for node in conflict_tree.body
+    if isinstance(node, ast.FunctionDef) and node.name == "validate_mcp_conflicts"
+)
+
+scope_assignments = [
+    node
+    for node in ast.walk(install)
+    if isinstance(node, ast.Assign)
+    and any(isinstance(target, ast.Name) and target.id == "scope" for target in node.targets)
+]
+handler_calls = [
+    node
+    for node in ast.walk(install)
+    if isinstance(node, ast.Call)
+    and isinstance(node.func, ast.Name)
+    and node.func.id == "_handle_mcp_install"
+]
+scope_path_calls = {
+    node.func.id
+    for node in ast.walk(handler)
+    if isinstance(node, ast.Call)
+    and isinstance(node.func, ast.Name)
+    and node.func.id in {"get_manifest_path", "get_apm_dir"}
+    and len(node.args) == 1
+    and isinstance(node.args[0], ast.Name)
+    and node.args[0].id == "scope"
+}
+run_calls = [
+    node
+    for node in ast.walk(handler)
+    if isinstance(node, ast.Call)
+    and isinstance(node.func, ast.Name)
+    and node.func.id == "_run_mcp_install"
+]
+
+problems = []
+if len(scope_assignments) != 1:
+    problems.append("install must compute scope exactly once")
+else:
+    value = scope_assignments[0].value
+    if not (
+        isinstance(value, ast.IfExp)
+        and isinstance(value.test, ast.Name)
+        and value.test.id == "global_"
+    ):
+        problems.append("install scope must derive from global_")
+if len(handler_calls) != 1 or not any(
+    keyword.arg == "scope"
+    and isinstance(keyword.value, ast.Name)
+    and keyword.value.id == "scope"
+    for keyword in (handler_calls[0].keywords if handler_calls else [])
+):
+    problems.append("direct MCP handler must consume install scope")
+if "scope" not in {arg.arg for arg in handler.args.args + handler.args.kwonlyargs}:
+    problems.append("direct MCP handler must accept scope")
+if scope_path_calls != {"get_manifest_path", "get_apm_dir"}:
+    problems.append("direct MCP paths must derive from scope")
+if len(run_calls) != 1 or not any(
+    keyword.arg == "scope"
+    and isinstance(keyword.value, ast.Name)
+    and keyword.value.id == "scope"
+    for keyword in (run_calls[0].keywords if run_calls else [])
+):
+    problems.append("direct MCP integration must receive scope")
+if "global_" in {arg.arg for arg in validator.args.args + validator.args.kwonlyargs}:
+    problems.append("MCP conflict validation must not own install scope")
+
+if problems:
+    print("\n".join(problems))
+    raise SystemExit(1)
+PY
+)
+direct_mcp_scope_status=$?
+if [ "$direct_mcp_scope_status" -ne 0 ]; then
+    echo "[x] Direct MCP installs must consume the install command scope"
+    echo "$direct_mcp_scope_output"
+    violations=$((violations + 1))
+fi
 mcp_ownership_migration_owner="src/apm_cli/install/mcp/ownership.py"
 mcp_ownership_migration_duplicates=$(
     grep -rEn --include='*.py' \
