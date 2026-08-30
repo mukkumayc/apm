@@ -2054,6 +2054,31 @@ if ! grep -q 'def load_frontmatter(fd: Any, encoding: str = "utf-8-sig")' \
     violations=$((violations + 1))
 fi
 
+echo "[*] AC37: agent source admission and inventory authority"
+agent_source_owner="src/apm_cli/integration/agent_integrator.py"
+agent_plain_admission_defs=$(grep -rEc \
+    '^[[:space:]]*def _is_plain_md_agent\(' \
+    src/apm_cli --include='*.py' \
+    | awk -F: '{sum += $2} END {print sum + 0}')
+agent_relative_identity_defs=$(grep -rEc \
+    '^[[:space:]]*def _source_agent_relpath\(' \
+    src/apm_cli --include='*.py' \
+    | awk -F: '{sum += $2} END {print sum + 0}')
+agent_inventory_defs=$(grep -rEc \
+    '^[[:space:]]*def prepare_agent_files\(' \
+    src/apm_cli --include='*.py' \
+    | awk -F: '{sum += $2} END {print sum + 0}')
+if [ "$agent_plain_admission_defs" -ne 1 ] \
+    || [ "$agent_relative_identity_defs" -ne 1 ] \
+    || [ "$agent_inventory_defs" -ne 1 ] \
+    || ! grep -q 'files, _ignored = self._classify_agent_files(package_path)' "$agent_source_owner" \
+    || ! grep -q 'agent_files, ignored_resources = self._classify_agent_files(package_path)' "$agent_source_owner" \
+    || ! grep -q '"agent_files": integrator.prepare_agent_files(' src/apm_cli/install/services.py \
+    || ! grep -q 'if agent_files is None:' "$agent_source_owner"; then
+    echo "[x] Agent admission, relative identity, and inventory must route through AgentIntegrator"
+    violations=$((violations + 1))
+fi
+
 echo "[*] AC18: bootstrap project-name authority"
 if ! uv run --extra dev python scripts/lint-bootstrap-project-name.py; then
     echo "[x] Manifest bootstrap names must route through core/project_name.py"

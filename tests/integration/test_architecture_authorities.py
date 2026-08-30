@@ -145,6 +145,26 @@ def test_uninstall_reintegration_routes_through_the_deployable_source_plan() -> 
     )
 
 
+def test_agent_source_admission_and_inventory_have_single_owner() -> None:
+    """Agent discovery decisions must route through AgentIntegrator."""
+    root = Path(__file__).parents[2]
+    owner = (root / "src/apm_cli/integration/agent_integrator.py").read_text(encoding="utf-8")
+    services = (root / "src/apm_cli/install/services.py").read_text(encoding="utf-8")
+    guard = (root / "scripts/lint-architecture-boundaries.sh").read_text(encoding="utf-8")
+    architecture = (root / ".github/instructions/architecture.instructions.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert owner.count("def _is_plain_md_agent(") == 1
+    assert owner.count("def _source_agent_relpath(") == 1
+    assert owner.count("def prepare_agent_files(") == 1
+    assert '"agent_files": integrator.prepare_agent_files(' in services
+    assert "Agent admission, relative identity, and inventory must route through" in guard
+    assert "| Agent source admission, relative identity, and package-level inventory |" in (
+        architecture
+    )
+
+
 def test_git_semver_preflight_eligibility_has_single_owner() -> None:
     """Positional ingress must consume, not duplicate, git-semver eligibility."""
     root = Path(__file__).parents[2]
