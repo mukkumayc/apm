@@ -46,6 +46,7 @@ semicolon-delimited, and specific to the file(s) that own the fact.
 | Runtime descriptors | runtime/registry.py | `src/apm_cli/runtime/registry.py` |
 | User-facing output / diagnostics | CommandLogger / console owner | `src/apm_cli/core/command_logger.py`; `src/apm_cli/utils/console.py` |
 | Compiled-output writes (atomic) | CompiledOutputWriter | `src/apm_cli/compilation/output_writer.py` |
+| Generated-content footer ownership wording | compilation/footer.py (build_generation_footer) | `src/apm_cli/compilation/footer.py` |
 | Deployment provenance / state | deployment_ledger.py | `src/apm_cli/core/deployment_ledger.py` |
 | Target-scoped deployed-file contraction | install/manifest_reconcile.py (reconcile_target_deployed_files) | `src/apm_cli/install/manifest_reconcile.py` |
 | Install success / failure outcome | the canonical install-outcome path | `src/apm_cli/install/outcome.py` |
@@ -59,6 +60,7 @@ semicolon-delimited, and specific to the file(s) that own the fact.
 | File-level deploy / sync / cleanup | BaseIntegrator (see integrators.instructions.md) | `src/apm_cli/integration/base_integrator.py` |
 | Windows stable executable path | install.ps1 ($currentDir / $currentExe) | `install.ps1` |
 | Git repository cache-key normalization | cache/url_normalize.py (normalize_repo_url / cache_shard_key) | `src/apm_cli/cache/url_normalize.py` |
+| Sparse-cone setup, dangling-symlink repair, and materialized symlink validation | utils/git_sparse.py | `src/apm_cli/utils/git_sparse.py` |
 | Self-update release -> installer ref + VERSION | commands/self_update.py (_ResolvedSelfUpdateRelease) | `src/apm_cli/commands/self_update.py` |
 | Dependency comparison identity vs display-cased materialization path | models/dependency/identity.py + materialization.py + DependencyReference | `src/apm_cli/models/dependency/identity.py`; `src/apm_cli/models/dependency/materialization.py`; `src/apm_cli/models/dependency/reference.py` |
 | Cached policy shape | policy/discovery.py (_policy_to_dict via _serialize_policy; ADO_POLICY_PROJECT; ADO_POLICY_REPOSITORY) | `src/apm_cli/policy/discovery.py` |
