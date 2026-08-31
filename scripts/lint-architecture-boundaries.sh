@@ -2073,6 +2073,7 @@ if [ "$agent_plain_admission_defs" -ne 1 ] \
     || [ "$agent_inventory_defs" -ne 1 ] \
     || ! grep -q 'files, _ignored = self._classify_agent_files(package_path)' "$agent_source_owner" \
     || ! grep -q 'agent_files, ignored_resources = self._classify_agent_files(package_path)' "$agent_source_owner" \
+    || ! grep -Fq 'frontmatter = load_frontmatter(str(source)).metadata' "$agent_source_owner" \
     || ! grep -q '"agent_files": integrator.prepare_agent_files(' src/apm_cli/install/primitive_integration.py \
     || ! grep -q 'prepare_primitive_inputs as _prepare_primitive_inputs' src/apm_cli/install/services.py \
     || ! grep -q 'if agent_files is None:' "$agent_source_owner" \

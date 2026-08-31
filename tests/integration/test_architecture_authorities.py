@@ -161,6 +161,7 @@ def test_agent_source_admission_and_inventory_have_single_owner() -> None:
     assert owner.count("def _is_plain_md_agent(") == 1
     assert owner.count("def _source_agent_relpath(") == 1
     assert owner.count("def prepare_agent_files(") == 1
+    assert "frontmatter = load_frontmatter(str(source)).metadata" in owner
     assert "_kiro_agent_relpath" not in owner
     assert '"agent_files": integrator.prepare_agent_files(' in preparation
     assert "prepare_primitive_inputs as _prepare_primitive_inputs" in services
