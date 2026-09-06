@@ -227,26 +227,12 @@ class ContextOptimizer:
         return self._glob_cache[pattern]
 
     def _portable_rel_path(self, path: Path) -> str:
-        """Memoized, syscall-free relative path for files from the canonical walk.
+        """Memoized relative path for files from the canonical walk.
 
-        ``portable_relpath`` calls ``.resolve()`` on both sides to cope with
-        paths from arbitrary, possibly-inconsistent sources -- real I/O that
-        also follows symlinks. But every ``path`` this is called with here
-        comes from :meth:`_get_all_files`, built by ``CompileInventory``'s
-        non-symlink-following directory walk starting at the already-resolved
-        ``self.base_dir`` (see :class:`ContextOptimizer.__init__`), so it is
-        always exactly ``self.base_dir`` joined with on-disk directory names
-        -- never a symlink target. ``Path.relative_to`` on that pairing is
-        pure string manipulation with no filesystem access, so this skips
-        ``.resolve()`` entirely for the case that is actually exercised.
-
-        On a tree with several symlinked subtrees (each hop an extra
-        readlink+lstat), a project with multiple ``**``-containing applyTo
-        patterns previously re-resolved every file once per pattern; this
-        cache also collapses repeats to once per file, but the win here is
-        skipping the syscalls altogether rather than just deduplicating them.
-        The ``portable_relpath`` fallback preserves prior behavior for a
-        ``path`` that, against expectation, isn't under ``self.base_dir``.
+        These paths always come from the non-symlink-following walk rooted at
+        the already-resolved ``self.base_dir``, so ``relative_to`` needs no
+        ``.resolve()`` here -- unlike ``portable_relpath``, kept as a fallback
+        for any path that turns out not to be under ``self.base_dir``.
         """
         cached = self._rel_path_cache.get(path)
         if cached is None:
@@ -895,9 +881,6 @@ class ContextOptimizer:
         for expanded_pattern in expanded_patterns:
             # For patterns with **, use cached glob results
             if "**" in expanded_pattern:
-                # Same memoized relative path _safe_recursive_glob used to
-                # build the cache below, so this reuses that resolve() work
-                # instead of re-resolving file_path per pattern.
                 rel_path = self._portable_rel_path(file_path)
 
                 # Use cached glob results instead of repeated glob calls
@@ -908,12 +891,7 @@ class ContextOptimizer:
                 if rel_path in self._glob_set_cache[expanded_pattern]:
                     return True
             else:
-                # For non-recursive patterns, use fnmatch as before. Same
-                # memoized relative path as the "**" branch above -- this
-                # runs for every file for every non-recursive applyTo
-                # segment (e.g. "package.json", "*.webpack.config.js"), so
-                # an unmemoized portable_relpath() here is exactly the same
-                # per-pattern full-tree resolve() cost as the "**" branch had.
+                # For non-recursive patterns, use fnmatch as before.
                 try:
                     rel_str = self._portable_rel_path(file_path)
                     if fnmatch.fnmatch(rel_str, expanded_pattern):
@@ -1011,9 +989,7 @@ class ContextOptimizer:
         Returns:
             float: Distribution score accounting for spread and depth diversity.
         """
-        # _directory_cache only ever holds directories _analyze_project_structure
-        # found at least one file in, so this count is always its length -- no
-        # need to re-scan every entry's total_files per instruction.
+        # _directory_cache only ever holds dirs with >=1 file, so len() suffices.
         total_dirs_with_files = len(self._directory_cache)
         if total_dirs_with_files == 0:
             return 0.0
@@ -1025,9 +1001,7 @@ class ContextOptimizer:
         if not depths:
             return base_ratio
 
-        # Hoisted out of the generator: computing sum(depths)/len(depths) on
-        # every iteration made this O(n^2) in the number of matching
-        # directories -- 18s for a single ~98k-directory pattern.
+        # Hoisted out of the loop -- recomputing it per-element was O(n^2).
         mean_depth = sum(depths) / len(depths)
         depth_variance = sum((d - mean_depth) ** 2 for d in depths) / len(depths)
         diversity_factor = 1.0 + (depth_variance * self.DIVERSITY_FACTOR_BASE)
@@ -1054,13 +1028,8 @@ class ContextOptimizer:
         coverage_candidates = []
         for candidate in candidates:
             # Verify this placement can provide hierarchical coverage for ALL matching directories.
-            # _single_placement_covers_all short-circuits on the first uncovered
-            # target instead of _calculate_hierarchical_coverage's always-full
-            # scan: most candidates are themselves deep inside matching_directories
-            # and fail on virtually the first check, so this turns what was
-            # O(candidates x matching_directories) into close to O(candidates) in
-            # practice (worst case unchanged for the handful of candidates that
-            # really are common ancestors and must be scanned in full).
+            # Short-circuits on the first uncovered target, avoiding a full
+            # O(candidates x matching_directories) scan.
             if self._single_placement_covers_all(candidate.directory, matching_directories):
                 # This candidate satisfies the mandatory coverage constraint
                 coverage_candidates.append(candidate)
@@ -1239,12 +1208,8 @@ class ContextOptimizer:
         if not matching_directories:
             return None
 
-        # Convert to relative paths for easier analysis. matching_directories
-        # are always _directory_cache keys (already canonical, see
-        # _portable_rel_path), so no per-directory resolve() is needed here --
-        # this used to redo one resolve() per directory, including
-        # self.base_dir.resolve() on every iteration, for a set that can hold
-        # every directory in the project.
+        # matching_directories are already-canonical _directory_cache keys, so
+        # no per-directory resolve() is needed here.
         relative_dirs = [d.relative_to(self.base_dir) for d in matching_directories]
 
         # Find the lowest common ancestor that covers all directories
@@ -1299,10 +1264,8 @@ class ContextOptimizer:
     ) -> bool:
         """Whether one placement hierarchically covers every target directory.
 
-        Equivalent to ``self._calculate_hierarchical_coverage([placement_dir],
-        target_directories) == target_directories``, but stops at the first
-        uncovered target instead of always scanning every one. Only used where
-        the caller needs the yes/no answer, not the full covered set.
+        Like ``_calculate_hierarchical_coverage`` but short-circuits on the
+        first miss instead of scanning every target.
         """
         for target in target_directories:
             try:
@@ -1316,14 +1279,8 @@ class ContextOptimizer:
 
         This is true if placement_dir is target_dir itself or any parent of target_dir.
 
-        Its one caller (:meth:`_calculate_hierarchical_coverage`) always passes
-        directories drawn from ``self._directory_cache`` -- ``matching_directories``
-        from :meth:`_find_matching_directories`, candidates from
-        :meth:`_generate_all_candidates`, both filtered to directory-cache keys --
-        which are already canonical from the same non-symlink-following walk (see
-        :meth:`_portable_rel_path`). Resolving here was therefore pure overhead: two
-        syscall-bound resolves per (target, placement) pair, called from a loop over
-        every matching directory for every placement candidate.
+        Both args always come from ``self._directory_cache`` (already canonical),
+        so no resolve() is needed here.
         """
         try:
             # Check if target is the same as placement or is a subdirectory of placement
@@ -1468,16 +1425,9 @@ class ContextOptimizer:
         if not pattern:
             return True
 
-        # Resolve working directory to handle path inconsistencies. Cached
-        # because analyze_context_inheritance calls this once per placed
-        # instruction with the same working_directory, and resolve() is a
-        # syscall-bound path-component walk that is otherwise repeated
-        # thousands of times for a single directory during large compiles.
-        # get_optimization_stats's hot path already passes an exact
-        # _directory_cache key (from iterating its .keys()), which is
-        # already canonical -- skip resolve() entirely in that case rather
-        # than just caching its result, since on a tree with symlinked
-        # subtrees even one resolve() per directory is expensive.
+        # Resolve working directory to handle path inconsistencies, but skip
+        # it entirely when it's already a canonical _directory_cache key, and
+        # cache the resolve() otherwise -- this runs per placed instruction.
         if working_directory in self._directory_cache:
             resolved_working_dir = working_directory
         else:
